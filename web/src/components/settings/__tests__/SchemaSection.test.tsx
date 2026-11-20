@@ -145,4 +145,32 @@ describe("SchemaSection", () => {
     expect(onSaveField).toHaveBeenCalledTimes(1);
     expect(onSaveField).toHaveBeenCalledWith("sandbox", "environment", ["FOO=bar"]);
   });
+
+  it("rejects port_mapping_list entries outside 0-65535 and keeps the draft", () => {
+    const { onSaveField } = mount(
+      [
+        descriptor({
+          field: "port_mappings",
+          label: "Port mappings",
+          widget: { kind: "list" },
+          validation: { rule: "port_mapping_list" },
+        }),
+      ],
+      { port_mappings: [] },
+    );
+    const message = "Must be port:port, ports up to 65535 (e.g. 3000:3000)";
+    fireEvent.click(screen.getByText("+ Add"));
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    for (const value of ["3000:65536", "65536:3000", "abc"]) {
+      fireEvent.change(input, { target: { value } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(screen.getByText(message)).toBeTruthy();
+      expect(input.value).toBe(value);
+      expect(onSaveField).not.toHaveBeenCalled();
+    }
+    fireEvent.change(input, { target: { value: "3000:65535" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSaveField).toHaveBeenCalledTimes(1);
+    expect(onSaveField).toHaveBeenCalledWith("sandbox", "port_mappings", ["3000:65535"]);
+  });
 });
