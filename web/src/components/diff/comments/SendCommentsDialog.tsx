@@ -26,6 +26,20 @@ interface Props {
 }
 
 /** Intro, read-only comments preview, and outro; the prompt is built at send time. */
+/** The server's human-readable `message` from a JSON error body, if any. */
+function refusalMessage(raw: string): string | null {
+  try {
+    const body: unknown = JSON.parse(raw);
+    if (body && typeof body === "object" && "message" in body) {
+      const m = (body as { message: unknown }).message;
+      if (typeof m === "string" && m.trim()) return m;
+    }
+  } catch {
+    // Not JSON; the caller falls back to status + text.
+  }
+  return null;
+}
+
 export function SendCommentsDialog({
   sessionId,
   delivery,
@@ -85,9 +99,10 @@ export function SendCommentsDialog({
         },
       );
       if (!res.ok) {
-        const text = (await res.text().catch(() => "")).slice(0, 500);
+        const raw = await res.text().catch(() => "");
+        const text = raw.slice(0, 500);
         if (mountedRef.current) {
-          setError(`Failed to send (${res.status}). ${text}`.trim());
+          setError(refusalMessage(raw) ?? `Failed to send (${res.status}). ${text}`.trim());
         }
         return;
       }

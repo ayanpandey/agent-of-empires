@@ -196,6 +196,40 @@ describe("SendCommentsDialog", () => {
     expect(reportTelemetrySeen).not.toHaveBeenCalled();
   });
 
+  it("shows the server's message, not raw JSON, when a terminal send is refused", async () => {
+    const message =
+      "The agent's input box holds text someone typed and has not sent, so nothing was typed. Send or clear it in the terminal, then retry.";
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 409,
+      text: () => Promise.resolve(JSON.stringify({ error: "input_line_busy", message })),
+    });
+    const { container, onSent } = setup({ delivery: "terminal" });
+    fireEvent.click(sendButton(container));
+    await waitFor(() => expect(container.textContent).toContain(message));
+    expect(container.textContent).not.toContain("input_line_busy");
+    expect(container.textContent).not.toContain('{"error"');
+    expect(container.textContent).not.toContain("Failed to send (409)");
+    expect(onSent).not.toHaveBeenCalled();
+    expect(reportTelemetrySeen).not.toHaveBeenCalled();
+
+    // Comments stay editable: the button is usable again and a retry re-sends.
+    await waitFor(() => expect(sendButton(container).textContent?.trim()).not.toBe("Sending..."));
+    fireEvent.click(sendButton(container));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("falls back to status and text when the JSON body has no string message", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve('{"error":"x"}'),
+    });
+    const { container } = setup();
+    fireEvent.click(sendButton(container));
+    await waitFor(() => expect(container.textContent).toContain('Failed to send (500). {"error":"x"}'));
+  });
+
   it("while sending, shows Sending..., ignores a second click and Escape", async () => {
     let resolveFetch: (v: { ok: boolean }) => void = () => {};
     fetchMock.mockReturnValue(new Promise((resolve) => (resolveFetch = resolve)));
